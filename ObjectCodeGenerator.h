@@ -44,7 +44,6 @@ std::string objectCode(std::string opor, std::string opand){
 
     else if (theInst.format == 3){
         //Mode 3/4 instruction.  Here we go.  First: determine address.
-        //bool literal = false;
         int address, modeFour = 0;
         std::string nixbpe = "000000";
 
@@ -55,9 +54,13 @@ std::string objectCode(std::string opor, std::string opand){
             nixbpe[2] = '1';
             opand = withoutEnd;
         }//end indexed
+        
+        //Evaluate opand into an address.  First: check for *, the current-address flag.
+        if (opand == '*')
+            address = ::currentAddress;
 
-        if (opand[0] == '='){
-            //literal = true;
+        //Now check if it's a literal.  If so, we don't need to mess with anything else.
+        else if (opand[0] == '='){
             opand.erase(0,1);
             address = forceInt(opand);
         }//end literal
