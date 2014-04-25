@@ -69,7 +69,7 @@ int main(int argCount, char** args){
             else{
                 //Map the label to the address.  Global unless in a macro and beginning with $
                 if (::currentMacro && (label[0] == '$'))
-                    ::currentMacro->labels[label.erase(0,1)];
+                    ::currentMacro->labels[label];
                 else if (::currentAddress)
                     ::labelTable[label] = ::currentAddress;
                 else //If currentAddress is 0, mapping it is a waste of time since 0 is the false-state.  Set the special case instead.
