@@ -137,6 +137,7 @@ int main(int argCount, char** args){
 
     //Reset the current address and handle all the instructions.
     ::currentAddress = ::startingAddress;
+    ::totalMacroOffset = 0;
     std::string opor;
     std::string* workingLine;
     int vars;
@@ -147,8 +148,10 @@ int main(int argCount, char** args){
 
         //Did we just pull a macro?  macroTable maps to pointers, and 0 on false.  I love pointers.
         if (::macroTable[opor]){
-            //Microcosm this whole process for the macro we just pulled
+            //Microcosm this whole process for the macro we just pulled.  Start from relative-zero.
             ::currentMacro = ::macroTable[opor];
+            ::currentMacro->currentAddress = 0;
+            ::cMacStartAddr = ::currentAddress;
             while(::currentMacro->notEmpty()){
                 //Grab an instruction.  Is it a macro-directive?  If not, handle it just like we would outside a macro.  If so, outsource to the macro directive processor.
                 workingLine = ::currentMacro->nextI();
