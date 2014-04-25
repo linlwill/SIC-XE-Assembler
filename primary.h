@@ -8,8 +8,10 @@
 #include <iostream>
 #include <map>
 #include "DivideString.h"
+#include "Macro.h"
 
 ///Begin shared data structures that don't get their own header
+
 
 class Error {
     //Generic error that prints text to the console
@@ -19,18 +21,12 @@ class Error {
         }//end constructor
 };//end error
 
-//Instruction lines have operators and operands
-struct instLine {
-    std::string opor;
-    std::string opand;
-    //Queue<std::string> opands;
-};//end instLine
-
-
 ///Begin shared data
 std::map<std::string, int> labelTable;
 int currentAddress, startingAddress, programLength;
 std::string programName, startLabel;
+Macro* currentMacro;
+std::map<std::string, Macro*> macroTable;
 
 ///Begin shared functions
 
@@ -63,12 +59,12 @@ int forceInt(std::string input){
     for(int i = working.length()-1; i >= 0; --i){
         //Work on the i-th character, moving downwards so first char worked on is least mathematically significant
         c = working[i];
-        //Reduce integer value of the character by its ASCII offset, unless we're dealing with chars.
+        //Reduce integer value of the character by its ASCII offset, unless we're in char mode
         if (reduce){
             if (c >= 'a') c -= 87;
             else c -= '0';
         }//end reduction
-        
+
         //Multiply true value of char by its base to the power of its significance, which is incremented for next time.  Add it to the sum
         sum += c * pow(base,significance++);
     }//end for
