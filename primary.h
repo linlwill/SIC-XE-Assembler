@@ -26,6 +26,7 @@ std::map<std::string, int> labelTable;
 int currentAddress, startingAddress, programLength;
 std::string programName, startLabel;
 Macro* currentMacro;
+int cMacStartAddr, totalMacroOffset;
 std::map<std::string, Macro*> macroTable;
 
 ///Begin shared functions
