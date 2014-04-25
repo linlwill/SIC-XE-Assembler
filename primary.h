@@ -8,8 +8,10 @@
 #include <iostream>
 #include <map>
 #include "DivideString.h"
+#include "Macro.h"
 
 ///Begin shared data structures that don't get their own header
+
 
 class Error {
     //Generic error that prints text to the console
@@ -19,24 +21,20 @@ class Error {
         }//end constructor
 };//end error
 
-//Instruction lines have operators and operands
-struct instLine {
-    std::string opor;
-    std::string opand;
-    //Queue<std::string> opands;
-};//end instLine
-
-
 ///Begin shared data
 std::map<std::string, int> labelTable;
 int currentAddress, startingAddress, programLength;
 std::string programName, startLabel;
+Macro* currentMacro;
+int cMacStartAddr, totalMacroOffset;
+std::map<std::string, Macro*> macroTable;
 
 ///Begin shared functions
 
 int forceInt(std::string input){
     int base = 10;
     std::string working;
+    bool reduce = true;
     //Check for alternate bases only if the string is long enough.
     if (input.length() > 3){
         //Return the integer representation of the input string, allowing X'working', C'working', and B'working' to branch mathematical base.
@@ -46,6 +44,11 @@ int forceInt(std::string input){
             base = 16;
         else if (id == "B'")
             base = 2;
+        else if (id == "C'"){
+            //Working is a string of chars that the programmer wants to preserve exactly as-is.  Chars in ASCII range are 8-bit, so treat as base-256
+            base = 256;
+            reduce = false;
+        }//end char-case
         else
             //Integer case means no id/working; entire input string is numbers.
             working = input;
@@ -57,9 +60,12 @@ int forceInt(std::string input){
     for(int i = working.length()-1; i >= 0; --i){
         //Work on the i-th character, moving downwards so first char worked on is least mathematically significant
         c = working[i];
-        //Reduce integer value of the character by its ASCII offset
-        if (c >= 'a') c -= 87;
-        else c -= '0';
+        //Reduce integer value of the character by its ASCII offset, unless we're in char mode
+        if (reduce){
+            if (c >= 'a') c -= 87;
+            else c -= '0';
+        }//end reduction
+
         //Multiply true value of char by its base to the power of its significance, which is incremented for next time.  Add it to the sum
         sum += c * pow(base,significance++);
     }//end for

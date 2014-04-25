@@ -17,10 +17,12 @@ std::string objectCode(std::string opor, std::string opand){
             //Reservation.  Final code is a flag to end the text record.  Space is value*opcode
             finalCode = "!END!";
             ::currentAddress += theInst.opcode * value;
+            if (::currentMacro) ::totalMacroOffset += theInst.opcode * value;
         } else {
             //Assignment.  Final code is hex equivilent of value.
             finalCode = hexOf(value,theInst.opcode);
             ::currentAddress += theInst.opcode;
+            if (::currentMacro) ::totalMacroOffset += theInst.opcode;
         }//end branch
     }//end 0-case: memory
 
@@ -28,6 +30,7 @@ std::string objectCode(std::string opor, std::string opand){
         //Simple one byte instruction.  Return opcode and advance current address by 1.
         finalCode = hexOf(theInst.opcode);
         ::currentAddress++;
+        if (::currentMacro) ::totalMacroOffset++;
     }//end 1-case: easy
 
     else if (theInst.format == 2){
@@ -40,6 +43,7 @@ std::string objectCode(std::string opor, std::string opand){
 
         //Advance current address by 2
         ::currentAddress += 2;
+        if (::currentMacro) ::totalMacroOffset += 2;
     }//end 2-case: medium
 
     else if (theInst.format == 3){
@@ -56,13 +60,18 @@ std::string objectCode(std::string opor, std::string opand){
             opand = withoutEnd;
         }//end indexed
 
-        if (opand[0] == '='){
+        //Evaluate opand into an address.  First: check for *, the current-address flag.
+        if (opand == "*")
+            address = ::currentAddress;
+
+        //Now check if it's a literal.  If so, we don't need to mess with anything else.
+        else if (opand[0] == '='){
             //literal = true;
             opand.erase(0,1);
             address = forceInt(opand);
         }//end literal
         else {
-            //Not a literal.  Check it for immediate:
+            //Not a literal.  Check it for immediate, that's just as easy as literal.
             if (opand[0] == '#'){
                 opand.erase(0,1);
                 address = forceInt(opand);
@@ -77,9 +86,16 @@ std::string objectCode(std::string opor, std::string opand){
                 }//end indirect
 
                 //Must be a label.  Fetch it.
-                address = ::labelTable[opand];
+                if (::currentMacro){
+                    //Address is where we started the macro plus relative address in the macro.
+                    address = ::currentMacro->labels[opand];
+                    address += ::cMacStartAddr;
+                } else
+                    //Address is just the global location plus macro offset
+                    address = ::labelTable[opand] + ::totalMacroOffset;
                 //Did we get nothing?  Error.
-                if (!address && (opand != ::startLabel)) throw Error("Unrecognized label in mode-3 object code");
+                if (!address && (opand != ::startLabel))
+                    throw Error("Unrecognized label in mode-3 object code");
             }//End not-immediate
         }//end not-literal
 
@@ -135,6 +151,7 @@ std::string objectCode(std::string opor, std::string opand){
 
         //Advance current address by 3 or 4
         ::currentAddress += (modeFour) ? 3 : 4;
+        if (::currentMacro) ::totalMacroOffset += (modeFour) ? 3 : 4;
     }//end 3-case: hard
 
     return finalCode;

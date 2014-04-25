@@ -7,7 +7,6 @@
 #include "Modification.h"
 #include "Text.h"
 
-
 int verify(std::string block){
     //Return 1,2,3 for instruction, directive, or macro.  0 for unrecognized.
     if (instructions::get(block).isValid())
@@ -16,7 +15,8 @@ int verify(std::string block){
     if (directives::get(block))
         return 2;
 
-    /*macros goes here*/
+    if ((block == "MACRO") || (block == "MEND"))
+        return 3;
 
     return 0;
 }//end verify
@@ -25,6 +25,7 @@ int main(int argCount, char** args){
     //Only run if given an input
     //Initialize the shared data
     Queue<std::string*> instQueue = Queue<std::string*>();
+    ::currentMacro = 0;
 
     //Open the files
     std::ifstream inFile;
@@ -57,18 +58,27 @@ int main(int argCount, char** args){
         label = "";
 
         if (state == 0){
-            //Unrecognized.  Here in pass one, that means label.  Map workingBlock to the current address and grab the next block to continue
-            ::labelTable[workingBlock] = ::currentAddress;
-            if (::currentAddress == 0)
-                ::startLabel = workingBlock;
-
-            workingBlock = blocks.pull();
+            //Unrecognized.  Here in pass one, that means label.  Next block is operator.
             label = workingBlock;
+            workingBlock = blocks.pull();
             state = verify(workingBlock);
+
+            //If macro, add to macroTable.  If at address 0, labelTable would lie so set the exception.  Else, add the label.
+            if(state == 3)
+                ::macroTable[label] =  new Macro();
+            else{
+                //Map the label to the address.  Global unless in a macro and beginning with $
+                if (::currentMacro && (label[0] == '$'))
+                    ::currentMacro->labels[label];
+                else if (::currentAddress)
+                    ::labelTable[label] = ::currentAddress;
+                else //If currentAddress is 0, mapping it is a waste of time since 0 is the false-state.  Set the special case instead.
+                    ::startingAddress = ::currentAddress;
+            }//end else
         }//end label case
 
         if (state == 2){
-            //Directive.  Build a string array of operands and pass to the directive processor.
+            //Directive.  Build a string array of operands and pass to the directive processor.  No need for special macro-level behavior since no directives should show up in the macro definition.
             temp = directives::get(workingBlock);
             std::string* opands = new std::string[temp];
 
@@ -86,17 +96,20 @@ int main(int argCount, char** args){
         }//end directive-case
 
         else if (state == 1){
-            //Instruction.  Assemble an instLine and push it to the instQueue, then update the current address.
+            //Instruction.  Assemble an instLine and push it to the queue, then update the current address.  Whether this is global or macro-level depends on currentMacro.
+            Queue<std::string*>& theQueue = (::currentMacro) ? instQueue : ::currentMacro->instructions;
+            int& address = (::currentMacro) ? ::currentAddress : ::currentMacro->currentAddress;
+
             std::string I[2];
             I[0] = workingBlock;
             I[1] = blocks.pull();
-            instQueue.push(I);
+            theQueue.push(I);
 
             //Update current address.
             Instruction theInst = instructions::get(workingBlock);
 
             if (theInst.format)
-                ::currentAddress += (workingBlock[0] == '+') ? 4 : theInst.format;
+                address += (workingBlock[0] == '+') ? 4 : theInst.format;
             else {
                 //Type-0, aka memory type.
                 int size = theInst.opcode;
@@ -105,13 +118,14 @@ int main(int argCount, char** args){
                     //Multiply the size by the amount of reservations taking place
                     size *= ::forceInt(I[1]);
 
-                ::currentAddress += size;
+                address += size;
             }//end else
 
         }//end instruction-case
 
         else if (state == 3){
-            //Macro.  Not implemented yet.
+            //We are entering or leaving a macro.  If leaving, set to 0.  If entering, set to address of the macro we just made.
+            ::currentMacro = (::currentMacro) ? 0 : ::macroTable[label];
         }//end macro-case
 
     }//End pass one.
@@ -123,11 +137,45 @@ int main(int argCount, char** args){
 
     //Reset the current address and handle all the instructions.
     ::currentAddress = ::startingAddress;
+    ::totalMacroOffset = 0;
+    std::string opor;
     std::string* workingLine;
+    int vars;
+
     while(instQueue.notEmpty()){
         workingLine = instQueue.pull();
-        //Create the object code from the instruction and push it to the text records.
-        textRec::push(objectCode(workingLine[0],workingLine[1]));
+        opor = workingLine[0];
+
+        //Did we just pull a macro?  macroTable maps to pointers, and 0 on false.  I love pointers.
+        if (::macroTable[opor]){
+            //Microcosm this whole process for the macro we just pulled.  Start from relative-zero.
+            ::currentMacro = ::macroTable[opor];
+            ::currentMacro->currentAddress = 0;
+            ::cMacStartAddr = ::currentAddress;
+            while(::currentMacro->notEmpty()){
+                //Grab an instruction.  Is it a macro-directive?  If not, handle it just like we would outside a macro.  If so, outsource to the macro directive processor.
+                workingLine = ::currentMacro->nextI();
+                opor = workingLine[0];
+                /* The beginnings of macro-directive handling is here.  I've commented it out because I wanted to upload the basic version first.
+                vars = macroDirs::get(opor);
+
+                if (vars){
+                    //Assemble a dynamic array of strings corresponding to how many variables specified.  0 is opor.  Comma seperates arguments.
+                    std::string* arguments = new std::string[vars];
+                    arguments[0] = opor;
+                    LinkedList<std::string> argList = divideString(workingLine[1], ',');
+                    if (argList.getLength() >= vars) throw Error("Insufficent arguments given in macro invocation");
+
+
+                }//End macro-directive-processing
+                else */
+                    textRec::push(objectCode(opor,workingLine[1]));
+            }//end while macro not empty - leave the macro and resume pulling from the main queue
+            ::currentMacro = 0;
+        } //End macro-handling
+        else
+            //Create the object code from the instruction and push it to the text records.
+            textRec::push(objectCode(opor,workingLine[1]));
     }//end pass two
 
     //Pass the text records, the modification records, and then make/pass the end record
