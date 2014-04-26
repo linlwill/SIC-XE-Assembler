@@ -6,6 +6,77 @@
 #include "Modification.h"
 #include "Instructions.h"
 
+int toAddress(std::string token){
+    //std::cout << "In toAddress working on " << token << std::endl;
+    //Convert token into an address, compensating for all the syntax it could include.
+
+    if (token[0] == '=')
+        token.erase(0,1);
+
+    int final;
+    //Handle math with recursion
+    Queue<std::string> mults = divideString(token,'*');
+    if (mults.getLength() != 1){
+        //Recurse to each term, then multiply them all together.
+        final = toAddress(mults.pull());
+        while (mults.notEmpty())
+            final *= toAddress(mults.pull());
+        return final;
+    }//end multiplication
+    //std::cout << "No multiplication" << std::endl;
+    Queue<std::string> divs = divideString(token,'/');
+    if (divs.getLength() != 1){
+        final = toAddress(divs.pull());
+        while (divs.notEmpty())
+            final /= toAddress(divs.pull());
+        return final;
+    }//end division
+    //std::cout << "No division" << std::endl;
+    Queue<std::string> adds = divideString(token,'+');
+    if (adds.getLength() != 1){
+        final = toAddress(adds.pull());
+        while (adds.notEmpty())
+            final += toAddress(adds.pull());
+        return final;
+    }//end addition
+    //std::cout << "No addition" << std::endl;
+    Queue<std::string> subs = divideString(token,'-');
+    if (subs.getLength() != 1){
+        final = toAddress(subs.pull());
+        while (subs.notEmpty())
+            final -= toAddress(subs.pull());
+        return final;
+    }//end subtraction
+    //std::cout << "No subtraction" << std::endl;
+
+    //Only a primative will have reached this point. Figure out which labelTable we should be using and fetch from it.  * is a special case.
+    if (token == "*") return ::currentAddress;
+
+    std::map<std::string, int>& theTable = (::currentMacro) ? ::currentMacro->labels : ::labelTable;
+    final = theTable[token];
+    //std::cout << "Pulled " << final << " from the table." << std::endl;
+    //If final is zero, we're either at the beginning or it's not a label.
+    if (!final){
+        //std::cout << "In the zero if" << std::endl;
+        //If it's the zero-case, return zero plus the offset.
+        std::string zeroCase;
+        if (::currentMacro){
+            zeroCase = ::currentMacro->zeroLabel;
+        } else zeroCase = ::startLabel;
+
+        if (token != zeroCase) {
+            //Not a label at all.  Treat as a number then.
+            //std::cout << "returning a number" << std::endl;
+            return forceInt(token);
+        }//end if-number
+    }//end zero-case
+
+    //std::cout << "Out of the zero-if" << std::endl;
+    //Offset the address.  In a macro, by the start point.  In global, by how much space macros have taken up so far.
+    int offset = (::currentMacro) ? ::cMacStartAddr : ::totalMacroOffset;
+    return final + offset;
+}//end addressing
+
 std::string objectCode(std::string opor, std::string opand){
     Instruction theInst = instructions::get(opor);
     std::string finalCode = "";
@@ -36,10 +107,12 @@ std::string objectCode(std::string opor, std::string opand){
     else if (theInst.format == 2){
         //Two byte register action.  Break opand up by comma.  Object code is opcode + reg1 + reg2
         Queue<std::string> theRegs = divideString(opand,',');
-        if (theRegs.getLength() != 2) throw Error("Invalid operand in type-2 instruction:\n"+opand);
+        if (theRegs.getLength() > 2) throw Error("Invalid operand in type-2 instruction:\n"+opand);
         finalCode = hexOf(theInst.opcode);
         finalCode += reg::get(theRegs.pull());
-        finalCode += reg::get(theRegs.pull());
+        //Since some format 2 instructions take only a single operand, append a dummy-zero just to take up space.
+        if (theRegs.notEmpty()) finalCode += reg::get(theRegs.pull());
+        else finalCode += "0";
 
         //Advance current address by 2
         ::currentAddress += 2;
@@ -60,44 +133,24 @@ std::string objectCode(std::string opor, std::string opand){
             opand = withoutEnd;
         }//end indexed
 
-        //Evaluate opand into an address.  First: check for *, the current-address flag.
-        if (opand == "*")
-            address = ::currentAddress;
+        //Check for prefixes.  Set coresponding bits.
+        if (opand[0] == '@'){
+            opand.erase(0,1);
+            nixbpe[0] = '1';
+        }//end indirect
 
-        //Now check if it's a literal.  If so, we don't need to mess with anything else.
-        else if (opand[0] == '='){
+        if (opand[0] == '='){
             //literal = true;
             opand.erase(0,1);
-            address = forceInt(opand);
         }//end literal
-        else {
-            //Not a literal.  Check it for immediate, that's just as easy as literal.
-            if (opand[0] == '#'){
-                opand.erase(0,1);
-                address = forceInt(opand);
-                nixbpe[1] = '1';
-            }//end immediate
 
-            else {
-                //Not immediate.  Must be a label.  First check if indirect.
-                if (opand[0] == '@'){
-                opand.erase(0,1);
-                nixbpe[0] = '1';
-                }//end indirect
+        if (opand[0] == '#'){
+            opand.erase(0,1);
+            nixbpe[1] = '1';
+        }//end immediate
 
-                //Must be a label.  Fetch it.
-                if (::currentMacro){
-                    //Address is where we started the macro plus relative address in the macro.
-                    address = ::currentMacro->labels[opand];
-                    address += ::cMacStartAddr;
-                } else
-                    //Address is just the global location plus macro offset
-                    address = ::labelTable[opand] + ::totalMacroOffset;
-                //Did we get nothing?  Error.
-                if (!address && (opand != ::startLabel))
-                    throw Error("Unrecognized label in mode-3 object code");
-            }//End not-immediate
-        }//end not-literal
+        //Resolve the operand into an address (or a number; the differences are purely situational)
+        address = toAddress(opand);
 
         //Check if mode-4
         if (opor[0] == '+'){
