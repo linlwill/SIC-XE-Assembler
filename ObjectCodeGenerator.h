@@ -15,6 +15,22 @@ int toAddress(std::string token){
 
     int final;
     //Handle math with recursion
+    Queue<std::string> adds = divideString(token,'+');
+    if (adds.getLength() != 1){
+        final = toAddress(adds.pull());
+        while (adds.notEmpty())
+            final += toAddress(adds.pull());
+        return final;
+    }//end addition
+    //std::cout << "No addition" << std::endl;
+    Queue<std::string> subs = divideString(token,'-');
+    if (subs.getLength() != 1){
+        final = toAddress(subs.pull());
+        while (subs.notEmpty())
+            final -= toAddress(subs.pull());
+        return final;
+    }//end subtraction
+    //std::cout << "No subtraction" << std::endl;
     Queue<std::string> mults = divideString(token,'*');
     if (mults.getLength() != 1){
         //Recurse to each term, then multiply them all together.
@@ -32,22 +48,7 @@ int toAddress(std::string token){
         return final;
     }//end division
     //std::cout << "No division" << std::endl;
-    Queue<std::string> adds = divideString(token,'+');
-    if (adds.getLength() != 1){
-        final = toAddress(adds.pull());
-        while (adds.notEmpty())
-            final += toAddress(adds.pull());
-        return final;
-    }//end addition
-    //std::cout << "No addition" << std::endl;
-    Queue<std::string> subs = divideString(token,'-');
-    if (subs.getLength() != 1){
-        final = toAddress(subs.pull());
-        while (subs.notEmpty())
-            final -= toAddress(subs.pull());
-        return final;
-    }//end subtraction
-    //std::cout << "No subtraction" << std::endl;
+
 
     //Only a primative will have reached this point. Figure out which labelTable we should be using and fetch from it.  * is a special case.
     if (token == "*") return ::currentAddress;
@@ -82,8 +83,8 @@ std::string objectCode(std::string opor, std::string opand){
     std::string finalCode = "";
 
     if (theInst.format == 0){
+        int value = toAddress(opand);
         //Memory management.  Opcode is length in bytes.  Opand is either the value to initialize to, or the number of things to reserve.
-        int value = ::addressOf(opand);
         if (opor.substr(0,3) == "RES"){
             //Reservation.  Final code is a flag to end the text record.  Space is value*opcode
             finalCode = "!END!";
