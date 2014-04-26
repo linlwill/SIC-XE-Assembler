@@ -83,7 +83,7 @@ std::string objectCode(std::string opor, std::string opand){
 
     if (theInst.format == 0){
         //Memory management.  Opcode is length in bytes.  Opand is either the value to initialize to, or the number of things to reserve.
-        int value = ::forceInt(opand);
+        int value = ::addressOf(opand);
         if (opor.substr(0,3) == "RES"){
             //Reservation.  Final code is a flag to end the text record.  Space is value*opcode
             finalCode = "!END!";
