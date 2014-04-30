@@ -1,29 +1,23 @@
 #ifndef MACROS_INCLUDED
 #define MACROS_INCLUDED
-//Define the Macro class for use elsewhere.
 #include <map>
 #include <string>
+#include "LinkedList.h"
 
 class Macro {
     //Instructions are held in len-2 arrays of strings
 
     public:
-        Queue<std::string*> instructions;
+        //Queue<std::string*> instructions;
+        LinkedList<std::string*> instructions;
         std::map<std::string,int> labels;
-        int currentAddress;
+        int currentAddress, argCount;
         std::string zeroLabel;
+        std::string* arguments;
 
         Macro(){
-            instructions = Queue<std::string*>();
+            instructions = LinkedList<std::string*>();
             currentAddress = 0;
         }//end constructor
-
-        std::string* nextI(){
-            return instructions.pull();
-        }//end next
-
-        bool notEmpty(){
-            return instructions.notEmpty();
-        }//end not-empty
 };//end class
 #endif
