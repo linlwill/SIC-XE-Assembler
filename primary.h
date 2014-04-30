@@ -11,8 +11,6 @@
 #include "Macro.h"
 
 ///Begin shared data structures that don't get their own header
-
-
 class Error {
     //Generic error that prints text to the console
     public:
@@ -26,8 +24,9 @@ std::map<std::string, int> labelTable;
 int currentAddress, startingAddress, programLength;
 std::string programName, startLabel;
 Macro* currentMacro;
-int cMacStartAddr, totalMacroOffset;
+int cMacStartAddr;
 std::map<std::string, Macro*> macroTable;
+//std::map<std::string, Queue<std::string*>*> progBlocks;
 
 ///Begin shared functions
 
@@ -93,7 +92,8 @@ std::string hexOf(int value, int length = 0){
 
         //If a length was given, append zeros or throw an error.  If not, return as-is.
         if (length){
-            if (length < final.length()) throw Error("Error in hexOf\nLength of resultant hex-string exceeded specified length");
+            if (length < final.length())
+                final = final.substr(0,length);
             while (length > final.length())
                 final = '0' + final;
         }//end length-forcing
