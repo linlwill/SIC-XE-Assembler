@@ -136,6 +136,24 @@ namespace instructions {
 		if (opor[0] == '+') opor.erase(0,1);
 		return DB[opor];
 	}//end get
+
+	int sizeOf(std::string opor, std::string opand){
+        //Retun the size, in bytes, of the instruction based on format and possibly operand
+        Instruction theInst = get(opor);
+        int size;
+
+        if (theInst.format){
+            //Instruction.  Format is the bytes it takes, +1 if opor begins with +
+            size = theInst.format;
+            if (opor[0] == '+') ++size;
+        } else {
+            //Memory.  opcode is length in bytes, multiply that by operand if reservation.
+            size = theInst.opcode;
+            if (opor.substr(0,3) == "RES")
+                size *= ::forceInt(opand);
+        }//end branch
+        return size;
+	}//end sizeOf - why has it taken me this long to write this function?
 }//end namespace
 
 #endif

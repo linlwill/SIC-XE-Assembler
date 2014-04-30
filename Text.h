@@ -24,9 +24,9 @@ namespace textRec {
             openRecord = "";
         }//end if
         else {
-            //If no open record, start one.  It's starting address is the current address minus the current block's length (b/c that was the address when this code began to be written)
+            //If no open record, start one.  It's starting address is the current address (b/c this record will be written before current address is updated)
             //code is a hex string, each hex string is half a byte.
-            if (openRecord == "") startAddr = ::currentAddress - code.length()/2;
+            if (openRecord == "") startAddr = ::currentAddress;
             openRecord += code;
         }//end else
     }//end push
