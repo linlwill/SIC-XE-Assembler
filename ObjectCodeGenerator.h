@@ -7,16 +7,19 @@
 #include "Instructions.h"
 
 int toAddress(std::string token){
-    //std::cout << "In toAddress working on " << token << std::endl;
-    //Convert token into an address, compensating for all the syntax it could include.
-
-    if (token[0] == '=')
-        token.erase(0,1);
-
-    int final;
-    //Handle math with recursion
-    Queue<std::string> adds = divideString(token,'+');
-    if (adds.getLength() != 1){
+    /*************
+    Address Resolving/Mathematical parsing
+    Recursively descend through arithmatic operations.
+    When primatives are found, determine if they exist in a label table.  If so, work on their mapping.
+    If not, work on their equivilent as an integer.
+    Ignore leading = as they are calls for literals, which we ignore.
+    *************/
+    if (token[0] == '=') token.erase(0,1);
+    
+    //Begin mathematical descent.  Handle += "First" since */ are higher precidence and they will thus happen earlier in the tree
+    int final = 0;
+    Queue<std::string> adds = divideString(token,'+')
+        if (adds.getLength() != 1){
         final = toAddress(adds.pull());
         while (adds.notEmpty())
             final += toAddress(adds.pull());
@@ -31,6 +34,18 @@ int toAddress(std::string token){
         return final;
     }//end subtraction
     //std::cout << "No subtraction" << std::endl;
+    Queue<std::string> divs = divideString(token,'/');
+    if (divs.getLength() != 1){
+        final = toAddress(divs.pull());
+        while (divs.notEmpty())
+            final /= toAddress(divs.pull());
+        return final;
+    }//end division
+    //std::cout << "No division" << std::endl;
+    
+    //Next up is multiplication, but * has multiple meanings.  If the token is * and * alone, return current address.  Else handle as multiplication.
+    if (token == "*") return ::currentAddress;
+    
     Queue<std::string> mults = divideString(token,'*');
     if (mults.getLength() != 1){
         //Recurse to each term, then multiply them all together.
@@ -40,43 +55,32 @@ int toAddress(std::string token){
         return final;
     }//end multiplication
     //std::cout << "No multiplication" << std::endl;
-    Queue<std::string> divs = divideString(token,'/');
-    if (divs.getLength() != 1){
-        final = toAddress(divs.pull());
-        while (divs.notEmpty())
-            final /= toAddress(divs.pull());
-        return final;
-    }//end division
-    //std::cout << "No division" << std::endl;
+    
+    //We have passed mathematical operations.  Only a primative will reach this point.  Determine if token is in a labelTable.
+    int globalLabel = ::labelTable[token];
+    int macroLabel = 0;
+    bool macroZero = false;
+    bool globalZero = false;
+    if (::currentMacro) && ((token[0] == '$') || (token[0] == '&')){
+        //Token is at least eligable to be in a macro labelTable
+        macroLabel = ::currentMacro->labels[token];
+        if ((!macroLabel) && (::currentMacro->zeroLabel == token))
+            macroZero = true;
+    }//end macro handling
+    
+    if((!globalLabel) && (token == ::startLabel))
+        globalZero = true;
+    
+    int final;
+    //The variables are set.  If a label mapping was found, return it.  Global labels return addresses that need to be offset by how much space macros have taken up.  Macro labels return offsets relative to the beginning of their macro
+    if (globalLabel || globalZero) final = globalLabel + ::totalMacroOffset;
+    else if (macroLabel || macroZero) final = macroLabel + ::cMacStartAddr;
+    
+    //No label.  Handle as a number.  If literal-protection is ever implemented, a check will exist here.
+    else final = forceInt(token);
+    
+}//end toAddress
 
-
-    //Only a primative will have reached this point. Figure out which labelTable we should be using and fetch from it.  * is a special case.
-    if (token == "*") return ::currentAddress;
-
-    std::map<std::string, int>& theTable = (::currentMacro) ? ::currentMacro->labels : ::labelTable;
-    final = theTable[token];
-    //std::cout << "Pulled " << final << " from the table." << std::endl;
-    //If final is zero, we're either at the beginning or it's not a label.
-    if (!final){
-        //std::cout << "In the zero if" << std::endl;
-        //If it's the zero-case, return zero plus the offset.
-        std::string zeroCase;
-        if (::currentMacro){
-            zeroCase = ::currentMacro->zeroLabel;
-        } else zeroCase = ::startLabel;
-
-        if (token != zeroCase) {
-            //Not a label at all.  Treat as a number then.
-            //std::cout << "returning a number" << std::endl;
-            return forceInt(token);
-        }//end if-number
-    }//end zero-case
-
-    //std::cout << "Out of the zero-if" << std::endl;
-    //Offset the address.  In a macro, by the start point.  In global, by how much space macros have taken up so far.
-    int offset = (::currentMacro) ? ::cMacStartAddr : ::totalMacroOffset;
-    return final + offset;
-}//end addressing
 
 std::string objectCode(std::string opor, std::string opand){
     /****************
