@@ -6,15 +6,13 @@
 #include "Modification.h"
 #include "Instructions.h"
 
-int toAddress(std::string token){
+int toAddress(std::string token, bool literal = true){
     /*************
     Address Resolving/Mathematical parsing
     Recursively descend through arithmatic operations.
     When primatives are found, determine if they exist in a label table.  If so, work on their mapping.
     If not, work on their equivilent as an integer.
-    Ignore leading = as they are calls for literals, which we ignore.
     *************/
-    if (token[0] == '=') token.erase(0,1);
     
     //Begin mathematical descent.  Handle += "First" since */ are higher precidence and they will thus happen earlier in the tree
     int final = 0;
@@ -72,12 +70,18 @@ int toAddress(std::string token){
         globalZero = true;
     
     int final;
-    //The variables are set.  If a label mapping was found, return it.  Global labels return addresses that need to be offset by how much space macros have taken up.  Macro labels return offsets relative to the beginning of their macro
-    if (globalLabel || globalZero) final = globalLabel + ::totalMacroOffset;
+    //The variables are set.  If a label mapping was found, return it.  Global labels return addresses.  Macro labels return offsets relative to the beginning of their macro
+    if (globalLabel || globalZero) final = globalLabel;
     else if (macroLabel || macroZero) final = macroLabel + ::cMacStartAddr;
     
-    //No label.  Handle as a number.  If literal-protection is ever implemented, a check will exist here.
-    else final = forceInt(token);
+    //No label.  Handle as a number.  If this statement is not a literal, it is invalid.  Default to true so this function can be used soley for its mathematical abilities.
+    else if (literal) final = forceInt(token);
+    
+    else {//Throw an error explaining what and why
+        std::string errorMessage = "Invalid label given in non-literal operand\n";
+        errorMessage += token;
+        throw Error(errorMessage);
+    }//end error-throwing
     
 }//end toAddress
 
@@ -129,6 +133,7 @@ std::string objectCode(std::string opor, std::string opand){
         int ni = 0;
         bool modeFour = false;
         bool immediate = false;
+        bool literal = false;
         
         //E is determiend by leading + in opor
         if (opor[0] == '+'){
@@ -148,6 +153,12 @@ std::string objectCode(std::string opor, std::string opand){
             opand.erase(0,1);
         }//end indirect
         
+        //Literals occur when a leading = is found.  They allow numbers to be used instead of labels.
+        if (opand[0] == '='){
+            literal = true;
+            opand.erase(0,1);
+        }//end literals
+        
         //N and I are encoded within the opcode.  Add ni to the opcode to find the merged, 8-bit, outcome.
         int iOpcode = theInst.opcode + ni;
         std::string hOpcode = hexOf(iOpcode,2);
@@ -160,7 +171,8 @@ std::string objectCode(std::string opor, std::string opand){
         }//end indexed
         
         //B and P are determined by final address and the proximity thereof to currentAddress.  They default to 0 in mode 4 and immediate.
-        int address = addressOf(opand);
+        int address = addressOf(opand,literal);
+        
         if ((!modeFour)&&(!immediate)){
             //To use p, program-counter relative addressing, we must be +- 2048 from the current address.
             int pVariance = address - ::currentAddress;
