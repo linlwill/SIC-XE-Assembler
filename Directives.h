@@ -19,6 +19,7 @@ namespace directives {
     DB["EQU"] = 2;
     DB["START"] = 2;
     DB["END"] = 1;
+    DB["LTORG"] = 1;
   }//end init
 
   int get(std::string keyword){
@@ -54,6 +55,10 @@ namespace directives {
         //Wherever we are, how much space we're using, that's where we end.
         ::programLength = ::currentAddress;
     }//end end
+    
+    else if (opor == "LTORG"){
+      //Do absolutely nothing.  My implementation of literals is far more elegant than the textbook's.
+    }//end ltorg
 
   }//end process
 
