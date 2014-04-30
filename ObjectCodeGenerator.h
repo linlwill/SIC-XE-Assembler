@@ -13,10 +13,10 @@ int toAddress(std::string token, bool literal = true){
     When primatives are found, determine if they exist in a label table.  If so, work on their mapping.
     If not, work on their equivilent as an integer.
     *************/
-    
+
     //Begin mathematical descent.  Handle += "First" since */ are higher precidence and they will thus happen earlier in the tree
     int final = 0;
-    Queue<std::string> adds = divideString(token,'+')
+    Queue<std::string> adds = divideString(token,'+');
         if (adds.getLength() != 1){
         final = toAddress(adds.pull());
         while (adds.notEmpty())
@@ -40,10 +40,10 @@ int toAddress(std::string token, bool literal = true){
         return final;
     }//end division
     //std::cout << "No division" << std::endl;
-    
+
     //Next up is multiplication, but * has multiple meanings.  If the token is * and * alone, return current address.  Else handle as multiplication.
     if (token == "*") return ::currentAddress;
-    
+
     Queue<std::string> mults = divideString(token,'*');
     if (mults.getLength() != 1){
         //Recurse to each term, then multiply them all together.
@@ -53,36 +53,36 @@ int toAddress(std::string token, bool literal = true){
         return final;
     }//end multiplication
     //std::cout << "No multiplication" << std::endl;
-    
+
     //We have passed mathematical operations.  Only a primative will reach this point.  Determine if token is in a labelTable.
     int globalLabel = ::labelTable[token];
     int macroLabel = 0;
     bool macroZero = false;
     bool globalZero = false;
-    if (::currentMacro) && ((token[0] == '$') || (token[0] == '&')){
+    if ((::currentMacro) && ((token[0] == '$') || (token[0] == '&')) ){
         //Token is at least eligable to be in a macro labelTable
         macroLabel = ::currentMacro->labels[token];
         if ((!macroLabel) && (::currentMacro->zeroLabel == token))
             macroZero = true;
     }//end macro handling
-    
+
     if((!globalLabel) && (token == ::startLabel))
         globalZero = true;
-    
-    int final;
+
     //The variables are set.  If a label mapping was found, return it.  Global labels return addresses.  Macro labels return offsets relative to the beginning of their macro
     if (globalLabel || globalZero) final = globalLabel;
     else if (macroLabel || macroZero) final = macroLabel + ::cMacStartAddr;
-    
+
     //No label.  Handle as a number.  If this statement is not a literal, it is invalid.  Default to true so this function can be used soley for its mathematical abilities.
     else if (literal) final = forceInt(token);
-    
+
     else {//Throw an error explaining what and why
         std::string errorMessage = "Invalid label given in non-literal operand\n";
         errorMessage += token;
         throw Error(errorMessage);
     }//end error-throwing
-    
+
+    return final;
 }//end toAddress
 
 
@@ -91,10 +91,10 @@ std::string objectCode(std::string opor, std::string opand){
     Object Code Generation
     Fetch the coresponding instruction from opor.  Based on its format, evaluate the necessary object code using opand.
     ****************/
-    
+
     Instruction theInst = instructions::get(opor);
     std::string finalCode = "";
-    
+
     if (theInst.format == 0){
         //Memory management.  Branch based on whether this is assignment or reservation
         if (opor.substr(0,3) == "RES"){
@@ -103,30 +103,31 @@ std::string objectCode(std::string opor, std::string opand){
         }//end reservation
         else {
             //Assignment.  Opand is the value.  Return the hexidecimal equivilent of that.  Opcode holds the byte count, each byte is 2 hex characters.
-            int value = addressOf(opand);
+            int value = toAddress(opand);
             finalCode = hexOf(value,theInst.opcode*2);
         }//end assignment
     }//end memory
-    
+
     else if (theInst.format == 1){
         //Simple, one byte opcode.  Return hex of opcode in one byte
         finalCode = hexOf(theInst.opcode,2);
     }//end mode-1
-    
+
     else if (theInst.format == 2){
         //Two bytes: opcode, R1, and possibly R2.  Rs are divided in operand by a comma.  If R2 is absent, fill in f as a placeholder since f is an invalid register.
         finalCode = hexOf(theInst.opcode,2);
         Queue<std::string> theRegs = divideString(opand,',');
+        int R1,R2;
         if (theRegs.notEmpty()){
-            int R1 = regs::get(theRegs.pull());
-            int R2 = 15;
-            if (theRegs.notEmpty()) R2 = regs::get(theRegs.pull());
+            R1 = reg::get(theRegs.pull());
+            R2 = 15;
+            if (theRegs.notEmpty()) R2 = reg::get(theRegs.pull());
         } else throw Error("No operand given in mode-2 instruction");
         //Convert the numerical representation of the registers to hex and append them to the code
         finalCode += hexOf(R1,1);
         finalCode += hexOf(R2,1);
     }//end mode-2
-    
+
     else if (theInst.format == 3){
         //Three, possibly four bytes.  Flag bits based on syntax and nature of operand.
         int xbpe = 0;
@@ -134,45 +135,46 @@ std::string objectCode(std::string opor, std::string opand){
         bool modeFour = false;
         bool immediate = false;
         bool literal = false;
-        
+
         //E is determiend by leading + in opor
         if (opor[0] == '+'){
             modeFour = true;
             opor.erase(0,1);
             xbpe += 1;
         }//end extended-format handling
-        
+
         //N and I depend on leanding char of operand
         if (opand[0] == '#'){
             ni += 1;
             opand.erase(0,1);
             immediate = true;
+            literal = true;
         }//end immediate
         if (opand[0] == '@'){
             ni += 2;
             opand.erase(0,1);
         }//end indirect
-        
+
         //Literals occur when a leading = is found.  They allow numbers to be used instead of labels.
         if (opand[0] == '='){
             literal = true;
             opand.erase(0,1);
         }//end literals
-        
+
         //N and I are encoded within the opcode.  Add ni to the opcode to find the merged, 8-bit, outcome.
         int iOpcode = theInst.opcode + ni;
         std::string hOpcode = hexOf(iOpcode,2);
-        
+
         //X is determined by last two chars of opand
         std::string lastTwo = opand.substr(opand.length()-1,opand.length());
         if (lastTwo == ",X"){
             xbpe += 8;
             opand = opand.substr(0,opand.length()-1);
         }//end indexed
-        
+
         //B and P are determined by final address and the proximity thereof to currentAddress.  They default to 0 in mode 4 and immediate.
-        int address = addressOf(opand,literal);
-        
+        int address = toAddress(opand,literal);
+
         if ((!modeFour)&&(!immediate)){
             //To use p, program-counter relative addressing, we must be +- 2048 from the current address.
             int pVariance = address - ::currentAddress;
@@ -187,21 +189,21 @@ std::string objectCode(std::string opor, std::string opand){
                     xbpe += 4;
                     address = bVariance;
                 //End attempt for b
-                } else throw Error("Out of range for P and B")
+                } else throw Error("Out of range for P and B");
             } else throw Error("Out of range for P and not in a base block");
         }//end BP
-        
+
         //All flag bits have been determined.  Together they form a single hex character
         std::string hFlags = hexOf(xbpe,1);
-        
+
         //Last is the determination of address, either 3 or 5 hex characters.
         int addrLen = (modeFour) ? 5 : 3;
         std::string hAddress = hexOf(address,addrLen);
-        
+
         //Final code is opcode (with absorbed NI), XBPE, address
         finalCode = hOpcode + hFlags + hAddress;
     }//end mode-3
-    
+
     return finalCode;
 }//end object code
 
