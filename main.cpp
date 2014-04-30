@@ -204,6 +204,7 @@ int main(int mainArgCount, char** mainArgs){
             ::currentMacro = macroTable[opor];
             LinkedList<std::string*>& theList = currentMacro->instructions;
             currentMacro->currentAddress = 0;
+            ::cMacStartAddr = ::currentAddress;
 
             //Iterate through its instructions, generating code for them, adding them to the text records.
             for(int i = 0; i < theList.getLength(); i++){
