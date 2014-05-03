@@ -99,6 +99,7 @@ int main(int mainArgCount, char** mainArgs){
                     Macro* newMacro = new Macro();
                     ::macroTable[label] = newMacro;
                     ::currentMacro = newMacro;
+                    newMacro->argCount = 0;
 
                     //If any arguments were specified, build a list of them for the macro.  Else, specify that it's null.
                     if (blocks.notEmpty()){
@@ -107,7 +108,9 @@ int main(int mainArgCount, char** mainArgs){
                         Queue<std::string> argQueue = divideString(argLine,',');
                         //Build an array of strings for the macro, each string being an entry in the argument line.
                         argCount = argQueue.getLength();
+                        newMacro->argCount = argCount;
                         newMacro->arguments = new std::string[argCount];
+
                         for(int i = 0; i < argCount; i++)
                             newMacro->arguments[i] = argQueue.pull();
                     //If no arguments were given, set the macro's arguments pointer to 0 as a flag that there are no arguments.  Have I mentioned that I love pointers?  They can be data, undefined, or flags that there's no data here.  References can't do that.
@@ -149,6 +152,13 @@ int main(int mainArgCount, char** mainArgs){
                 else ::currentAddress += size;
             }//end instructions-only VIP room
 
+            //The branch isn't necessary but it improves readability.  For an invocation, jump ahead the macro's size.
+            else if (state == 4){
+                int mSize = ::macroTable[opor]->size;
+                ::currentAddress += mSize;
+                if (::currentMacro) ::currentMacro->currentAddress += mSize;
+            }//end invocations only
+
         }//end 1 or 4 aka instruction or invocation
 
         else if (state == 2){
@@ -166,7 +176,8 @@ int main(int mainArgCount, char** mainArgs){
         else if (state == 3){
             //Macro beginning/end.  We handled beginning within the label field, so here we will handle ending.
             if (workingBlock == "MEND"){
-                //Set the macro's current address to 0, then the current macro to 0 as a flag that we are done.
+                //Set the macro's size to its maximal address, reset its current address to 0, then the current macro to 0 as a flag that we are done.
+                ::currentMacro->size = ::currentMacro->currentAddress;
                 ::currentMacro->currentAddress = 0;
                 ::currentMacro = 0;
             }//end restriction to ending
@@ -206,6 +217,22 @@ int main(int mainArgCount, char** mainArgs){
             currentMacro->currentAddress = 0;
             ::cMacStartAddr = ::currentAddress;
 
+            //If there are arguments to be had, opand needs to be broken up and assigned accordingly.  Passing false to dS allows empty arguments.
+            if (::currentMacro->arguments){
+                Queue<std::string> givenArgs = divideString(opand,',',false);
+                std::string theArg;
+                int theAssignment;
+                for (int i = 0; i < ::currentMacro->argCount; i++){
+                    //If there is an argument given, assign it.  Else, if it includes an equals, let it be that.  Else, error.
+                    theArg = ::currentMacro->arguments[i];
+                    if (givenArgs.notEmpty()) theAssignment = toAddress(givenArgs.pull());
+                    else if (macros::hasDefault(theArg)) theAssignment = toAddress(macros::getDefault(theArg));
+                    else throw Error("Insufficient arguments given in macro invocation");
+
+                    ::currentMacro->labels[theArg] = theAssignment;
+                }//end for
+            }//end if
+
             //Iterate through its instructions, generating code for them, adding them to the text records.
             for(int i = 0; i < theList.getLength(); i++){
                 //For now, assume no macros-in-macros
@@ -215,10 +242,9 @@ int main(int mainArgCount, char** mainArgs){
 
                 textRec::push(objectCode(opor,opand));
 
-                //Update the current location, relative location, and total macro offset.
+                //Update the current location and relative location.
                 size = instructions::sizeOf(opor,opand);
                 ::currentAddress += size;
-                ::totalMacroOffset += size;
                 ::currentMacro->currentAddress += size;
             }//end for
 
