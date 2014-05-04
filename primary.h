@@ -21,7 +21,7 @@ class Error {
 
 ///Begin shared data
 std::map<std::string, int> labelTable;
-int currentAddress, startingAddress, programLength;
+int currentAddress, startingAddress, programLength, currentBase = -1;
 std::string programName, startLabel;
 Macro* currentMacro;
 int cMacStartAddr;

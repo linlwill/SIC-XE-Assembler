@@ -2,7 +2,6 @@
 #ifndef OBJECTCODE_INCLUDED
 #define OBJECTCODE_INCLUDED
 #include "primary.h"
-#include "Base.h"
 #include "Modification.h"
 #include "Instructions.h"
 
@@ -79,6 +78,7 @@ int toAddress(std::string token, bool literal = true){
     else {//Throw an error explaining what and why
         std::string errorMessage = "Invalid label given in non-literal operand\n";
         errorMessage += token;
+        errorMessage += "\nDone.";
         throw Error(errorMessage);
     }//end error-throwing
 
@@ -129,6 +129,9 @@ std::string objectCode(std::string opor, std::string opand){
     }//end mode-2
 
     else if (theInst.format == 3){
+        //RSUB is a special case that breaks the normal rules for operands.  Return a constant.
+        if (opor == "RSUB") return "4c00000";
+
         //Three, possibly four bytes.  Flag bits based on syntax and nature of operand.
         int xbpe = 0;
         int ni = 0;
@@ -165,12 +168,14 @@ std::string objectCode(std::string opor, std::string opand){
         int iOpcode = theInst.opcode + ni;
         std::string hOpcode = hexOf(iOpcode,2);
 
-        //X is determined by last two chars of opand
-        std::string lastTwo = opand.substr(opand.length()-1,opand.length());
-        if (lastTwo == ",X"){
-            xbpe += 8;
-            opand = opand.substr(0,opand.length()-1);
-        }//end indexed
+        //X is determined by last two chars of opand.  Only run if opand is even that long.
+        if (opand.length() > 3){
+            std::string lastTwo = opand.substr(opand.length()-2,opand.length());
+            if (lastTwo == ",X"){
+                xbpe += 8;
+                opand = opand.substr(0,opand.length()-2);
+            }//end indexed
+        }//end length-check for indexed checking
 
         //B and P are determined by final address and the proximity thereof to currentAddress.  They default to 0 in mode 4 and immediate.
         int address = toAddress(opand,literal);
@@ -182,15 +187,15 @@ std::string objectCode(std::string opor, std::string opand){
                 xbpe += 2;
                 address = pVariance;
             //End attempt for p
-            } else if (Base::inBlock(::currentAddress)){
+            } else if (::currentBase != -1){
                 //Out of range for p, but if we are in a base block then b may be possible.
-                unsigned int bVariance = address - Base::getBase(currentAddress);
+                unsigned int bVariance = address - ::currentBase;
                 if (bVariance < 4095){
                     xbpe += 4;
                     address = bVariance;
                 //End attempt for b
                 } else throw Error("Out of range for P and B");
-            } else throw Error("Out of range for P and not in a base block");
+            } else throw Error("Out of range for P and not in a base");
         }//end BP
 
         //All flag bits have been determined.  Together they form a single hex character

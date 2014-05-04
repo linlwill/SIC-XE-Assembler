@@ -7,6 +7,19 @@
 #include "Modification.h"
 #include "Text.h"
 
+std::string augmentedPull(Queue<std::string>& theQueue){
+    //Enhance the basic pulling function to concatinate blocks that shouldn't have been broken up
+    if (!theQueue.notEmpty()) throw Error("Augmented pull attempted on empty queue");
+
+    std::string result = theQueue.pull();
+
+    //Possible conflict: result ends with a comma.  Should be concatinated with the next one, if there is a next one.
+    char theLast = result[result.length()-1];
+    if ( (theLast == ',') && (theQueue.notEmpty()) ) result += theQueue.pull();
+
+    return result;
+}//end enhanced pull
+
 int verify(std::string block){
     //Return 1,2,3 for instruction, directive, or macro.  0 for unrecognized.
     if (instructions::get(block).isValid())
@@ -35,13 +48,18 @@ int main(int mainArgCount, char** mainArgs){
     If instruction or macro invocation, assemble an opor/opand pair and push it to whatever queue we're using.  If instruction, update currentAddress.
     If label, eval the next block.  If instruction/invocation, map current address to the label.
     *********************/
-    //Open the files.  Default to testFile.txt, else whatever the first passed thing is.
+    //Open the files.  Default to Test.txt, else whatever the first passed thing is.
     std::ifstream inFile;
     if (mainArgCount > 1) inFile.open(mainArgs[1]);
-    else inFile.open("testFile.txt");
+    else inFile.open("Test.txt");
 
     //Error if the file didn't open
     if (!inFile.is_open()) throw Error("File did not open");
+
+    std::ofstream outFile;
+    outFile.open("out.txt");
+
+    std::cout << "made it" << std::endl;
 
     //Declare data we will need for line evaluation, and initialize the shared data.  Keep a global queue and a pointer to whatever queue we're working on now, which by default is global.  Macros will change this (and then change it back)
     ::currentMacro = 0;
@@ -52,10 +70,17 @@ int main(int mainArgCount, char** mainArgs){
     int state, argCount;
     std::string* stringBlock;
 
+    //Initialize some standard start behavior and a flag that END hasn't been run yet
+    ::currentAddress = 0;
+    ::startingAddress = 0;
+    ::programName = "noname";
+    ::programLength = -1;
+
     //Begin reading lines in.
     while (!inFile.eof()){
         getline(inFile,line);
         //Empty lines are worthless.  Lines that begin with periods are comments.  In either case, move on like it wasn't even here.
+        while (line[0] == 9) line.erase(0,1);
         if ((line == "") || (line[0] == '.')) continue;
 
         //Reset the label field so we don't get stale data.
@@ -63,11 +88,11 @@ int main(int mainArgCount, char** mainArgs){
 
         //Whitespace (and tabs, but they're a special case within divideString) demark blocks.  Divide based on spaces.
         Queue<std::string> blocks = divideString(line,' ');
-        workingBlock = blocks.pull();
+        workingBlock = augmentedPull(blocks);
 
         //If the first block's first character is a number, we're dealing with line numbers, and the first block is irrelevant.  Move on to the next.
         if ((workingBlock[0] >= '0') && (workingBlock[0] <= '9')){
-            if (blocks.notEmpty()) workingBlock = blocks.pull();
+            if (blocks.notEmpty()) workingBlock = augmentedPull(blocks);
             else throw Error("Line numbers given on an otherwise empty line");
         }//end line number handling
 
@@ -76,7 +101,7 @@ int main(int mainArgCount, char** mainArgs){
         if (state == 0){
             //Block was unrecognized, which means label (probably).  Store it, because it matters, and re-evaluate based on the NEXT block.
             label = workingBlock;
-            if (blocks.notEmpty()) workingBlock = blocks.pull();
+            if (blocks.notEmpty()) workingBlock = augmentedPull(blocks);
             else {
                 //An unrecognized token with nothing afterward is an error.
                 errorMessage = "Unrecognized token with no operand:\n";
@@ -104,7 +129,7 @@ int main(int mainArgCount, char** mainArgs){
                     //If any arguments were specified, build a list of them for the macro.  Else, specify that it's null.
                     if (blocks.notEmpty()){
                         //Divide based on comma.  Each entry is an argument.
-                        argLine = blocks.pull();
+                        argLine = augmentedPull(blocks);
                         Queue<std::string> argQueue = divideString(argLine,',');
                         //Build an array of strings for the macro, each string being an entry in the argument line.
                         argCount = argQueue.getLength();
@@ -136,7 +161,7 @@ int main(int mainArgCount, char** mainArgs){
             std::string* pair = new std::string[2];
             opor = workingBlock;
             pair[0] = opor;
-            if (blocks.notEmpty()) opand = blocks.pull();
+            if (blocks.notEmpty()) opand = augmentedPull(blocks);
             else opand = "";
             pair[1] = opand;
 
@@ -166,7 +191,7 @@ int main(int mainArgCount, char** mainArgs){
             argCount = directives::get(workingBlock);
             stringBlock = new std::string[argCount];
             stringBlock[0] = label;
-            if (blocks.notEmpty()) stringBlock[1] = blocks.pull();
+            if (blocks.notEmpty()) stringBlock[1] = augmentedPull(blocks);
 
             //Pass the set to the directives processor, then free the strings from memory
             directives::process(workingBlock, stringBlock);
@@ -186,10 +211,14 @@ int main(int mainArgCount, char** mainArgs){
     }//end pass-one while.  Close the file, we're done with it.
     inFile.close();
 
+    //If END hasn't been run yet, default it to the final current location
+    if (::programLength == -1) ::programLength = ::currentAddress;
+
 
     //Throw an error if we exited pass 1 while leaving an open macro
     if (::currentMacro) throw Error("Pass One over with open macro definition");
 
+std::cout << "Done with pass one" << std::endl;
     /*********************
     Pass Two
 
@@ -209,8 +238,21 @@ int main(int mainArgCount, char** mainArgs){
         opor = workingLine[0];
         opand = workingLine[1];
 
+        std::cout << "Working on " << opor << " " << opand << std::endl;
+
+        if (instructions::get(opor).format == -1){
+            std::cout << "Special case mode activated" << std::endl;
+            //Special case instructions.
+            if (opor == "BASE"){
+                if (opand == "") ::currentBase = -1;
+                else ::currentBase = toAddress(opand);
+            }//end BASE
+
+            continue;
+        }//end special
+
         //Check to see if it is a macro invocation.
-        if (macroTable[opor]){
+        else if (macroTable[opor]){
             //Enter the macro, set it's relative address to 0.
             ::currentMacro = macroTable[opor];
             LinkedList<std::string*>& theList = currentMacro->instructions;
@@ -257,6 +299,7 @@ int main(int mainArgCount, char** mainArgs){
               ::currentAddress += instructions::sizeOf(opor,opand);
         }//end instruction
     }//end pass-2 while
+    std::cout << "Done with pass 2" << std::endl;
 
 
     /*********************
@@ -266,19 +309,26 @@ int main(int mainArgCount, char** mainArgs){
     Write the header record, all the text records, the modification records, and the end record, in that order.
     *********************/
     //Mandate an out.txt.  This is to allow forwards-compatibility with any multi-file nonsense later.
-    std::ofstream outFile;
-    outFile.open("out.txt");
 
     outFile << 'H' << programName.substr(0,6) << ::hexOf(::startingAddress,6) << ::hexOf(::programLength,6) << std::endl;
 
+ //   std::cout << "Header pushed" << std::endl;
     //Push a final end flag to ensure no data gets left behind.
     textRec::push("!END!");
     while(textRec::notEmpty())
         outFile << textRec::pull() << '\n';
+
+  //  std::cout << "Text recs pushed" << std::endl;
+
     while(modRec::notEmpty())
         outFile << modRec::pull() << '\n';
 
+  //  std::cout << "Mod recs pushed" << std::endl;
+
     //End record: E + starting address(6)
     outFile << 'E' << hexOf(::startingAddress,6);
+
+   // std::cout << "End record pushed" << std::endl;
+
     outFile.close();
 }//end main
