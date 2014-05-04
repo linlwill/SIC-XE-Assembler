@@ -128,6 +128,8 @@ namespace instructions {
 		DB["BYTE"] = Instruction(0,"1");
 		DB["RESW"] = Instruction(0,"3");
 		DB["RESB"] = Instruction(0,"1");
+		//Begin special instructions.  These have unique behavior in pass 2.
+		DB["BASE"] = Instruction(-1,"");
 	}//end init
 
 	Instruction get(std::string opor){
@@ -142,7 +144,10 @@ namespace instructions {
         Instruction theInst = get(opor);
         int size;
 
-        if (theInst.format){
+        //Special instructions have no length.
+        if (theInst.format == -1) return 0;
+
+        else if (theInst.format){
             //Instruction.  Format is the bytes it takes, +1 if opor begins with +
             size = theInst.format;
             if (opor[0] == '+') ++size;
