@@ -56,6 +56,11 @@ int main(int mainArgCount, char** mainArgs){
     //Error if the file didn't open
     if (!inFile.is_open()) throw Error("File did not open");
 
+    std::ofstream outFile;
+    outFile.open("out.txt");
+
+    std::cout << "made it" << std::endl;
+
     //Declare data we will need for line evaluation, and initialize the shared data.  Keep a global queue and a pointer to whatever queue we're working on now, which by default is global.  Macros will change this (and then change it back)
     ::currentMacro = 0;
     Queue<std::string*> globalInstQueue = Queue<std::string*>();
@@ -75,6 +80,7 @@ int main(int mainArgCount, char** mainArgs){
     while (!inFile.eof()){
         getline(inFile,line);
         //Empty lines are worthless.  Lines that begin with periods are comments.  In either case, move on like it wasn't even here.
+        while (line[0] == 9) line.erase(0,1);
         if ((line == "") || (line[0] == '.')) continue;
 
         //Reset the label field so we don't get stale data.
@@ -234,8 +240,19 @@ std::cout << "Done with pass one" << std::endl;
 
         std::cout << "Working on " << opor << " " << opand << std::endl;
 
+        if (instructions::get(opor).format == -1){
+            std::cout << "Special case mode activated" << std::endl;
+            //Special case instructions.
+            if (opor == "BASE"){
+                if (opand == "") ::currentBase = -1;
+                else ::currentBase = toAddress(opand);
+            }//end BASE
+
+            continue;
+        }//end special
+
         //Check to see if it is a macro invocation.
-        if (macroTable[opor]){
+        else if (macroTable[opor]){
             //Enter the macro, set it's relative address to 0.
             ::currentMacro = macroTable[opor];
             LinkedList<std::string*>& theList = currentMacro->instructions;
@@ -282,6 +299,7 @@ std::cout << "Done with pass one" << std::endl;
               ::currentAddress += instructions::sizeOf(opor,opand);
         }//end instruction
     }//end pass-2 while
+    std::cout << "Done with pass 2" << std::endl;
 
 
     /*********************
@@ -291,19 +309,26 @@ std::cout << "Done with pass one" << std::endl;
     Write the header record, all the text records, the modification records, and the end record, in that order.
     *********************/
     //Mandate an out.txt.  This is to allow forwards-compatibility with any multi-file nonsense later.
-    std::ofstream outFile;
-    outFile.open("out.txt");
 
     outFile << 'H' << programName.substr(0,6) << ::hexOf(::startingAddress,6) << ::hexOf(::programLength,6) << std::endl;
 
+ //   std::cout << "Header pushed" << std::endl;
     //Push a final end flag to ensure no data gets left behind.
     textRec::push("!END!");
     while(textRec::notEmpty())
         outFile << textRec::pull() << '\n';
+
+  //  std::cout << "Text recs pushed" << std::endl;
+
     while(modRec::notEmpty())
         outFile << modRec::pull() << '\n';
 
+  //  std::cout << "Mod recs pushed" << std::endl;
+
     //End record: E + starting address(6)
     outFile << 'E' << hexOf(::startingAddress,6);
+
+   // std::cout << "End record pushed" << std::endl;
+
     outFile.close();
 }//end main
