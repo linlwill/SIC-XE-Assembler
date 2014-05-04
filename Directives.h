@@ -43,9 +43,9 @@ namespace directives {
     }//end equ
 
     else if (opor == "START"){
-      //The operand is where to start the program, as an integer.  Its label is the program's name, default "program".  Later this function can be expanded to handle control sections/program blocks.
+      //The operand is where to start the program, as an integer.  Its label is the program's name, default "noname".  Later this function can be expanded to handle control sections/program blocks.
       int a = ::forceInt(opands[1]);
-      if (opands[0] == "") ::programName = "program";
+      if (opands[0] == "") ::programName = "noname";
       else ::programName = opands[0];
       ::currentAddress = a;
       ::startingAddress = a;
@@ -55,7 +55,7 @@ namespace directives {
         //Wherever we are, how much space we're using, that's where we end.
         ::programLength = ::currentAddress;
     }//end end
-    
+
     else if (opor == "LTORG"){
       //Do absolutely nothing.  My implementation of literals is far more elegant than the textbook's.
     }//end ltorg
