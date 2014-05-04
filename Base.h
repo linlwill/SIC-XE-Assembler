@@ -1,3 +1,4 @@
+
 #ifndef BASE_INCLUDED
 #define BASE_INCLUDED
 #include "LinkedList.h"
